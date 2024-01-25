@@ -1,4 +1,4 @@
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const express = require("express");
 const app = express();
 const cors = require("cors");
@@ -28,10 +28,38 @@ async function run() {
     await client.connect();
 
     const productCollection = client.db("destinyDB").collection("products");
+    const cartCollection = client.db("destinyDB").collection("cart");
 
     // products apis ------------
     app.get("/products", async (req, res) => {
       const result = await productCollection.find().toArray();
+      res.send(result);
+    });
+
+    // Cart Get Api
+    app.get("/carts", async (req, res) => {
+      const email = req.query.email;
+      if (!email) {
+        res.send([]);
+      }
+
+      const query = { email: email };
+      const result = await cartCollection.find(query).toArray();
+      res.send(result);
+    });
+
+    // cart post api
+    app.post("/carts", async (req, res) => {
+      const item = req.body;
+      const result = await cartCollection.insertOne(item);
+      res.send(result);
+    });
+
+    // Cart delete
+    app.delete("/carts/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await cartCollection.deleteOne(query);
       res.send(result);
     });
 
