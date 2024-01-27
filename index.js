@@ -51,6 +51,19 @@ async function run() {
     // cart post api
     app.post("/carts", async (req, res) => {
       const item = req.body;
+      const exist = await cartCollection.findOne({ productId: item.productId });
+      if (exist) {
+        const update = await cartCollection.updateOne(
+          { productId: exist.productId },
+          {
+            $set: {
+              quantity: exist.quantity + 1,
+            },
+          },
+          { upsert: true }
+        );
+        return res.send(update);
+      }
       const result = await cartCollection.insertOne(item);
       res.send(result);
     });
