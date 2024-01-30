@@ -36,6 +36,7 @@ async function run() {
 
     const productCollection = client.db("destinyDB").collection("products");
     const cartCollection = client.db("destinyDB").collection("cart");
+    const orderCollection = client.db("destinyDB").collection("order");
 
     // products apis ------------
     app.get("/products", async (req, res) => {
@@ -83,6 +84,7 @@ async function run() {
       res.send(result);
     });
 
+    const tran_id = new ObjectId().toString();
     // Payment Intigrate
     app.post("/order", async (req, res) => {
       const order = req.body;
@@ -90,9 +92,9 @@ async function run() {
       const data = {
         total_amount: order.totalPayment,
         currency: "BDT",
-        tran_id: uuidv4(), // use unique tran_id for each api call
-        success_url: "http://localhost:3030/success",
-        fail_url: "http://localhost:3030/fail",
+        tran_id: tran_id, // use unique tran_id for each api call
+        success_url: `http://localhost:5000/payment/success/${tran_id}`,
+        fail_url: `http://localhost:5000/payment/fail/${tran_id}`,
         cancel_url: "http://localhost:3030/cancel",
         ipn_url: "http://localhost:3030/ipn",
         shipping_method: "Courier",
@@ -117,16 +119,58 @@ async function run() {
         ship_postcode: 1000,
         ship_country: "Bangladesh",
       };
-      console.log(data);
       const sslcz = new SSLCommerzPayment(store_id, store_passwd, is_live);
       sslcz.init(data).then((apiResponse) => {
         // Redirect the user to payment gateway
         let GatewayPageURL = apiResponse.GatewayPageURL;
         res.send({ url: GatewayPageURL });
+
+        const finalOrder = {
+          name: order.name,
+          email: order.email,
+          phone: order.phone,
+          address: order.address,
+          productTotal: order.productTotal,
+          deliveryFee: order.deliveryFee,
+          tax: order.tax,
+          totalPayment: order.totalPayment,
+          paidStatus: false,
+          TransactionID: tran_id,
+        };
+
+        const result = orderCollection.insertOne(finalOrder);
+
         console.log("Redirecting to: ", GatewayPageURL);
       });
-    });
 
+      app.post("/payment/success/:tranId", async (req, res) => {
+        // const tranId = req.params.tranId;
+        // console.log(req.params.tranId);
+        const result = await orderCollection.updateOne(
+          { TransactionID: req.params.tranId },
+          {
+            $set: {
+              paidStatus: true,
+            },
+          }
+        );
+        if (result.modifiedCount > 0) {
+          res.redirect(
+            `http://localhost:5173/payment/success/${req.params.tranId}`
+          );
+        }
+      });
+      app.post("/payment/fail/:tranId", async (req, res) => {
+        const result = await orderCollection.deleteOne({
+          TransactionID: req.params.tranId,
+        });
+        if (result.deletedCount) {
+          res.redirect(
+            `http://localhost:5173/payment/fail/${req.params.tranId}`
+          );
+        }
+      });
+    });
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
